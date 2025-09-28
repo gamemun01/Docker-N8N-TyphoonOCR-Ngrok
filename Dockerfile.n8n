@@ -1,0 +1,21 @@
+FROM n8nio/n8n
+
+# Switch to root to install dependencies
+USER root
+
+# Install Python and pip
+RUN apk add --no-cache python3 py3-pip poppler-utils
+
+# Create a virtual environment and install typhoon-ocr
+RUN python3 -m venv /opt/venv \
+    && . /opt/venv/bin/activate \
+    && pip install --no-cache-dir typhoon-ocr openai
+
+# Optional: Make the virtualenv Python globally available (e.g., symlink or path export)
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Install global npm packages
+RUN npm install -g require humanparser
+
+# Switch back to node user
+USER node

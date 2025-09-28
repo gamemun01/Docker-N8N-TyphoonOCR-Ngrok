@@ -1,0 +1,67 @@
+volumes:
+  db_storage:
+  n8n_storage:
+
+services:
+  postgres:
+    image: postgres:18
+    restart: always
+    environment:
+      - POSTGRES_USER
+      - POSTGRES_PASSWORD
+      - POSTGRES_DB
+      - POSTGRES_NON_ROOT_USER
+      - POSTGRES_NON_ROOT_PASSWORD
+    volumes:
+      - db_storage:/var/lib/postgresql/data
+      - ./init-data.sh:/docker-entrypoint-initdb.d/init-data.sh
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -h localhost -U ${POSTGRES_USER} -d ${POSTGRES_DB}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  n8n:
+    build:
+      context: .
+      dockerfile: Dockerfile.n8n
+    restart: always
+    environment:
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=postgres
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_DATABASE=${POSTGRES_DB}
+      - DB_POSTGRESDB_USER=${POSTGRES_NON_ROOT_USER}
+      - DB_POSTGRESDB_PASSWORD=${POSTGRES_NON_ROOT_PASSWORD}
+      - GENERIC_TIMEZONE="Asia/Bangkok"
+      - TZ="Asia/Bangkok"
+      - N8N_LOG_LEVEL=debug
+    ports:
+      - 5678:5678
+    links:
+      - postgres
+    volumes:
+      - n8n_storage:/home/node/.n8n
+      - ./shared:/data/shared
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  ngrok:
+    image: ngrok/ngrok:latest
+    restart: always
+    command: http n8n:5678
+    environment:
+      - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN}
+    ports:
+      - 4040:4040
+    depends_on:
+      - n8n
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:4040/api/tunnels || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
